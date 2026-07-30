@@ -2,7 +2,9 @@
 
 Sučelje je tanki sloj oko `similarity.py`: sva matematika (standardizacija,
 uloge, objedinjeni model sličnosti) živi ondje i dijeli je i notebook i ova
-aplikacija, pa njihovi rezultati ne mogu razići se.
+aplikacija, pa njihovi rezultati ne mogu razići se. Prikaz je dvojezičan
+(hr/en) preko `prijevodi.py`; `similarity.py` ostaje isključivo hrvatski jer
+ga dijeli i notebook.
 
 Pokretanje lokalno:
     streamlit run app.py
@@ -12,20 +14,109 @@ from __future__ import annotations
 
 import html
 from pathlib import Path
+from urllib.parse import urlencode
 
 import numpy as np
 import pandas as pd
 import streamlit as st
 
 import analitika as a
+import prijevodi as p
 import similarity as s
 
 # "?app=1" razlikuje početnu (marketinšku) stranicu od stvarnog alata, tako da
 # oba CTA gumba na landing.html mogu voditi ovamo običnim <a href="?app=1">.
 JE_POCETNA = st.query_params.get("app") != "1"
 
+JEZIK = st.query_params.get("lang", p.ZADANI_JEZIK)
+if JEZIK not in p.JEZICI:
+    JEZIK = p.ZADANI_JEZIK
+
+
+def _url_s_parametrima(**zamjene: str) -> str:
+    """URL s trenutnim query parametrima, uz navedene zamjene/dodatke.
+
+    Koristi se za sve navigacijske poveznice (jezik, natrag, profil) tako da
+    se pritiskom na njih NE izgube ostali parametri (npr. ?app=1&igrac=...).
+    """
+    trenutni = dict(st.query_params)
+    trenutni.update(zamjene)
+    trenutni = {k: v for k, v in trenutni.items() if v not in (None, "")}
+    return "?" + urlencode(trenutni)
+
+
+def _jezik_toggle_html() -> str:
+    aktivan_hr = "active" if JEZIK == "hr" else ""
+    aktivan_en = "active" if JEZIK == "en" else ""
+    return (
+        '<div class="lang-toggle">'
+        f'<a href="{html.escape(_url_s_parametrima(lang="hr"))}" class="lang-link {aktivan_hr}">HR</a>'
+        '<span class="lang-sep">·</span>'
+        f'<a href="{html.escape(_url_s_parametrima(lang="en"))}" class="lang-link {aktivan_en}">EN</a>'
+        "</div>"
+    )
+
+
+def _render_landing(jezik: str) -> str:
+    """Učitaj landing.html i popuni {{PLACEHOLDER}} tokene prijevodima."""
+    tekst = (Path(__file__).parent / "landing.html").read_text(encoding="utf-8")
+
+    zamjene = {
+        "LANG_TOGGLE": _jezik_toggle_html(),
+        "URL_APP": html.escape(_url_s_parametrima(app="1")),
+        "LANDING_EYEBROW": p.t("landing_eyebrow", jezik),
+        "LANDING_H1": p.t("landing_h1", jezik),
+        "LANDING_LEAD": p.t("landing_lead", jezik),
+        "LANDING_CTA_PRIMARY": p.t("landing_cta_primary", jezik),
+        "LANDING_CTA_SECONDARY": p.t("landing_cta_secondary", jezik),
+        "LANDING_EXAMPLE_EYEBROW": p.t("landing_example_eyebrow", jezik),
+        "LANDING_EXAMPLE_H2": p.t("landing_example_h2", jezik),
+        "LANDING_EXAMPLE_LEAD": p.t("landing_example_lead", jezik),
+        "LABEL_PROFIL_ZNACAJKE": p.t("label_profil_znacajke", jezik),
+        "LANDING_ROLE_PLAYMAKER": p.t("landing_role_playmaker", jezik),
+        "LANDING_ROLE_ORGANIZATOR": p.t("landing_role_organizator", jezik),
+        "LANDING_ROLE_BOX2BOX": p.t("landing_role_box2box", jezik),
+        "LANDING_EXAMPLE_META": p.t("landing_example_meta", jezik),
+        "ZNACAJKA_PAS_TOTAL_FINAL_THIRD": p.znacajka("PAS_TOTAL (FINAL THIRD PASSES)", jezik),
+        "ZNACAJKA_CAR_ENDED_CHANCE": p.znacajka("CAR_ENDED WITH CHANCE", jezik),
+        "ZNACAJKA_PAS_TOTAL_OPEN_PLAY": p.znacajka("PAS_TOTAL (OPEN PLAY PASSES)", jezik),
+        "ZNACAJKA_DEF_TACKLES": p.znacajka("DEF_TACKLES", jezik),
+        "ZNACAJKA_DEF_TOTAL_AERIAL": p.znacajka("DEF_TOTAL (AERIAL DUELS)", jezik),
+        "LANDING_SIMILAR_HEADER": p.t("landing_similar_header", jezik),
+        "LANDING_SIMILAR_METHOD": p.t("landing_similar_method", jezik),
+        "WORD_IGRAC": p.t("word_igrac", jezik),
+        "WORD_ULOGA": p.t("word_uloga", jezik),
+        "WORD_LIGA": p.t("word_liga", jezik),
+        "WORD_MIN": p.t("word_min", jezik),
+        "WORD_SLICNOST": p.t("word_slicnost", jezik),
+        "LANDING_ILLUSTRATIVE": p.t("landing_illustrative", jezik),
+        "LANDING_FAQ_EYEBROW": p.t("landing_faq_eyebrow", jezik),
+        "LANDING_FAQ_H2": p.t("landing_faq_h2", jezik),
+        "LANDING_FAQ_Q1": p.t("landing_faq_q1", jezik),
+        "LANDING_FAQ_A1": p.t("landing_faq_a1", jezik),
+        "LANDING_FAQ_Q2": p.t("landing_faq_q2", jezik),
+        "LANDING_FAQ_A2": p.t("landing_faq_a2", jezik),
+        "LANDING_FAQ_Q3": p.t("landing_faq_q3", jezik),
+        "LANDING_FAQ_A3": p.t("landing_faq_a3", jezik),
+        "LANDING_FAQ_Q4": p.t("landing_faq_q4", jezik),
+        "LANDING_FAQ_A4": p.t("landing_faq_a4", jezik),
+        "LANDING_FAQ_Q5": p.t("landing_faq_q5", jezik),
+        "LANDING_FAQ_A5": p.t("landing_faq_a5", jezik),
+        "LANDING_CTA2_TITLE": p.t("landing_cta2_title", jezik),
+        "LANDING_CTA2_LEAD": p.t("landing_cta2_lead", jezik),
+        "LANDING_FOOTER": p.t("landing_footer", jezik),
+    }
+    for kljuc, vrijednost in zamjene.items():
+        tekst = tekst.replace("{{" + kljuc + "}}", vrijednost)
+
+    # st.markdown() koristi Python-Markdown ispod haube: prazan redak usred bloka
+    # sirovog HTML-a prekida "raw HTML" način rada, pa sve nakon njega završi kao
+    # escapean tekst umjesto pravih oznaka. Uklanjamo prazne retke da to spriječimo.
+    return "\n".join(line for line in tekst.splitlines() if line.strip())
+
+
 st.set_page_config(
-    page_title="Podudarnost — tražilica sličnih igrača",
+    page_title=p.t("app_page_title", JEZIK),
     page_icon="⚽",
     layout="wide",
     initial_sidebar_state="collapsed" if JE_POCETNA else "expanded",
@@ -41,12 +132,7 @@ if JE_POCETNA:
         """,
         unsafe_allow_html=True,
     )
-    landing_html = (Path(__file__).parent / "landing.html").read_text(encoding="utf-8")
-    # st.markdown() koristi Python-Markdown ispod haube: prazan redak usred bloka
-    # sirovog HTML-a prekida "raw HTML" način rada, pa sve nakon njega završi kao
-    # escapean tekst umjesto pravih oznaka. Uklanjamo prazne retke da to spriječimo.
-    landing_html = "\n".join(line for line in landing_html.splitlines() if line.strip())
-    st.markdown(landing_html, unsafe_allow_html=True)
+    st.markdown(_render_landing(JEZIK), unsafe_allow_html=True)
     st.stop()
 
 # ---------------------------------------------------------------------------
@@ -106,6 +192,12 @@ st.markdown(
   padding:10px 14px;font-size:13.5px;color:var(--ink-2);border-radius:0 4px 4px 0;
   margin-bottom:6px;}
 .flag b{color:var(--ink);}
+.lang-toggle{display:flex;gap:6px;align-items:center;font-size:12px;
+  font-weight:600;letter-spacing:.04em;}
+.lang-link{color:var(--ink-3);text-decoration:none;padding:2px 4px;}
+.lang-link:hover{color:var(--ink);}
+.lang-link.active{color:var(--accent);}
+.lang-sep{color:var(--ink-3);}
 </style>
 """,
     unsafe_allow_html=True,
@@ -159,30 +251,6 @@ def _pronadi_tocno(prostor: s.ProstorIgraca, ime: str) -> int | None:
     poklapanja = prostor.df.index[prostor.df["NAME"] == ime]
     return int(poklapanja[0]) if len(poklapanja) else None
 
-METODA_OBJASNJENJA = {
-    "soft_cosine": (
-        "Zadano. Traži igrače sličnog STILA igre, a pritom uvažava da su "
-        "neke statistike prirodno povezane (npr. tko puno dodaje, obično "
-        "puno dodaje i u završnu trećinu) pa ih ne broji dvaput. "
-        "Najuravnoteženiji izbor za većinu upita."
-    ),
-    "cosine": (
-        "Traži igrače sličnog STILA igre — gleda samo 'oblik' profila "
-        "(u čemu je igrač relativno jak ili slab), a ne koliko je toga "
-        "ukupno odradio. Dobro za usporedbu igrača s različitom minutažom."
-    ),
-    "euclidean": (
-        "Traži igrače koji su najbliži cilju u svemu odjednom — i po "
-        "stilu i po razini doprinosa. Stroža mjera: kažnjava svaku "
-        "razliku, veliku ili malu."
-    ),
-    "dot_product": (
-        "Traži igrače koji rade ISTE stvari u SLIČNOJ KOLIČINI (npr. "
-        "slično puno golova i dodavanja). Favorizira igrače s visokom "
-        "minutažom — dobro za 'jednako produktivnu' zamjenu, manje za "
-        "sličan stil."
-    ),
-}
 
 ALPHA_OPCIJE = [0.0, 0.25, 0.5, 0.75, 1.0]
 
@@ -215,23 +283,34 @@ def _dodirnuo_napredno() -> None:
 _init_stanje()
 
 
+def _naziv_metode(jezik: str) -> str:
+    """Ime trenutno odabrane metode za prikaz (prati preset ili prilagođeno)."""
+    if st.session_state["prilagodjeno"]:
+        return p.t("prilagodjeno_alpha", jezik, alpha=st.session_state["alpha"])
+    return p.t(f"metoda_naziv_{st.session_state['metoda']}", jezik)
+
+
 # ---------------------------------------------------------------------------
 # Stranica pojedinog igrača — puna statistika + analitički grafovi na zahtjev
 # ---------------------------------------------------------------------------
-def _prikazi_zaglavlje_igraca(cilj: pd.Series, prostor: s.ProstorIgraca) -> None:
+def _prikazi_zaglavlje_igraca(cilj: pd.Series, prostor: s.ProstorIgraca, jezik: str) -> None:
     top1, top2, top3 = st.columns([3, 1, 2])
     with top1:
         st.markdown(f'<div class="target-name">{html.escape(cilj["NAME"])}</div>', unsafe_allow_html=True)
     with top2:
+        uloga_txt = html.escape(p.prevedi_ulogu(cilj["ULOGA"], jezik))
         st.markdown(
-            f'<div style="padding-top:10px"><span class="chip">{html.escape(cilj["ULOGA"])}</span></div>',
+            f'<div style="padding-top:10px"><span class="chip">{uloga_txt}</span></div>',
             unsafe_allow_html=True,
         )
     with top3:
         liga = f'{cilj["LEAGUE"]} · ' if prostor.ima_lige else ""
+        meta = p.t(
+            "meta_nastupa_minuta", jezik,
+            apps=int(cilj["APPS"]), mins=p.formatiraj_broj(int(cilj["MINS"]), jezik),
+        )
         st.markdown(
-            f'<div style="padding-top:14px" class="target-meta">'
-            f'{liga}{int(cilj["APPS"])} nastupa · {int(cilj["MINS"]):,} minuta</div>'.replace(",", "."),
+            f'<div style="padding-top:14px" class="target-meta">{liga}{meta}</div>',
             unsafe_allow_html=True,
         )
 
@@ -240,74 +319,75 @@ def _stranica_igraca(prostor: s.ProstorIgraca, idx: int) -> None:
     cilj = prostor.df.iloc[idx]
     ime = cilj["NAME"]
 
-    if st.button("← Natrag na pretragu"):
-        del st.query_params["igrac"]
-        st.rerun()
+    gore1, gore2 = st.columns([1, 20])
+    with gore1:
+        if st.button(p.t("btn_natrag", JEZIK)):
+            del st.query_params["igrac"]
+            st.rerun()
+    with gore2:
+        st.markdown(
+            f'<div style="text-align:right">{_jezik_toggle_html()}</div>', unsafe_allow_html=True
+        )
 
-    _prikazi_zaglavlje_igraca(cilj, prostor)
+    _prikazi_zaglavlje_igraca(cilj, prostor, JEZIK)
     st.divider()
 
     # --- puna tablica statistika -------------------------------------------------
-    st.markdown('<div class="section-label">Sve statistike</div>', unsafe_allow_html=True)
-    naziv_uloge = cilj["ULOGA"]
+    st.markdown(f'<div class="section-label">{p.t("label_sve_statistike", JEZIK)}</div>', unsafe_allow_html=True)
+    naziv_uloge = p.prevedi_ulogu(cilj["ULOGA"], JEZIK)
     osnovica = st.radio(
-        "Percentil u odnosu na:",
-        ["Sve igrače", f"Istu ulogu ({naziv_uloge})"],
+        p.t("label_percentil_odnos", JEZIK),
+        [p.t("opcija_sve_igrace", JEZIK), p.t("opcija_istu_ulogu", JEZIK, uloga=naziv_uloge)],
         horizontal=True,
         key="percentil_osnovica",
-        help=(
-            "Postotak dodavanja stopera znači nešto drugo naspram napadača nego "
-            "naspram drugih stopera — obje osnovice su korisne."
-        ),
+        help=p.t("help_percentil_osnovica", JEZIK),
     )
-    prema_ulozi = osnovica.startswith("Istu")
+    prema_ulozi = osnovica != p.t("opcija_sve_igrace", JEZIK)
     pct = _cache_percentili_uloga(prostor) if prema_ulozi else _cache_percentili(prostor)
-    osnovica_txt = f"uloga: {naziv_uloge}" if prema_ulozi else "svi igrači"
+    osnovica_txt = (
+        p.t("osnovica_uloga", JEZIK, uloga=naziv_uloge) if prema_ulozi else p.t("osnovica_svi_igraci", JEZIK)
+    )
 
     tablica = pd.DataFrame(
         {
-            "Statistika": [s.NAZIVI.get(c, c) for c in prostor.znacajke],
-            "Obitelj": [a.kategorija(c) for c in prostor.znacajke],
-            "Per 90": [float(cilj[c]) for c in prostor.znacajke],
-            "Z-vrijednost": prostor.X[idx].round(2),
-            "Percentil": pct[idx].round(1),
+            p.t("col_statistika", JEZIK): [p.znacajka(c, JEZIK) for c in prostor.znacajke],
+            p.t("col_obitelj", JEZIK): [p.kategorija_naziv(a.kategorija(c), JEZIK) for c in prostor.znacajke],
+            p.t("col_per90", JEZIK): [float(cilj[c]) for c in prostor.znacajke],
+            p.t("col_zvrijednost", JEZIK): prostor.X[idx].round(2),
+            p.t("col_percentil", JEZIK): pct[idx].round(1),
         }
-    ).sort_values("Percentil", ascending=False, ignore_index=True)
+    ).sort_values(p.t("col_percentil", JEZIK), ascending=False, ignore_index=True)
 
     st.dataframe(
         tablica,
         hide_index=True,
         width="stretch",
         column_config={
-            "Percentil": st.column_config.ProgressColumn(
-                "Percentil", min_value=0, max_value=100, format="%.0f"
+            p.t("col_percentil", JEZIK): st.column_config.ProgressColumn(
+                p.t("col_percentil", JEZIK), min_value=0, max_value=100, format="%.0f"
             ),
-            "Per 90": st.column_config.NumberColumn("Per 90", format="%.2f"),
-            "Z-vrijednost": st.column_config.NumberColumn("Z-vrijednost", format="%+.2f"),
+            p.t("col_per90", JEZIK): st.column_config.NumberColumn(p.t("col_per90", JEZIK), format="%.2f"),
+            p.t("col_zvrijednost", JEZIK): st.column_config.NumberColumn(
+                p.t("col_zvrijednost", JEZIK), format="%+.2f"
+            ),
         },
     )
 
     st.divider()
 
     # --- grafovi na zahtjev -------------------------------------------------------
-    naziv_metode = s.PRESETI[st.session_state["metoda"]]["naziv"] if not st.session_state["prilagodjeno"] else f"prilagođeno (α={st.session_state['alpha']:.2f})"
-    st.markdown('<div class="section-label">Analitički grafovi</div>', unsafe_allow_html=True)
-    st.caption(
-        f"Grafovi sličnosti ispod koriste trenutno odabranu metodu na stranici za "
-        f"pretragu: **{naziv_metode}**."
-    )
+    naziv_metode = _naziv_metode(JEZIK)
+    st.markdown(f'<div class="section-label">{p.t("label_analiticki_grafovi", JEZIK)}</div>', unsafe_allow_html=True)
+    st.caption(p.t("caption_grafovi_metoda", JEZIK, metoda=naziv_metode))
 
     # 1) Profil percentila
-    if st.button("📊 Generiraj profil percentila", key="btn_pct"):
+    if st.button(p.t("btn_generiraj_pct", JEZIK), key="btn_pct"):
         st.session_state["prikazi_graf_percentila"] = True
     if st.session_state.get("prikazi_graf_percentila"):
         st.altair_chart(
-            a.graf_percentila(prostor, idx, pct, osnovica_txt), use_container_width=True, theme=None
+            a.graf_percentila(prostor, idx, pct, osnovica_txt, JEZIK), use_container_width=True, theme=None
         )
-        st.caption(
-            "Percentil po svakoj od 29 statistika, grupirano po obitelji. "
-            "Isprekidana crta je medijan (50. percentil)."
-        )
+        st.caption(p.t("caption_graf_pct", JEZIK))
 
     # zajednički izračun za preostala dva grafa (sličnost prema svim igračima)
     S = _cache_matrica(prostor, st.session_state["alpha"], st.session_state["koristi_M"])
@@ -317,56 +397,47 @@ def _stranica_igraca(prostor: s.ProstorIgraca, idx: int) -> None:
     )
 
     # 2) Mapa sličnosti
-    if st.button("🗺️ Generiraj mapu sličnosti", key="btn_mapa"):
+    if st.button(p.t("btn_generiraj_mapa", JEZIK), key="btn_mapa"):
         st.session_state["prikazi_graf_mape"] = True
     if st.session_state.get("prikazi_graf_mape"):
         metoda_2d = st.radio(
-            "2D metoda",
+            p.t("label_2d_metoda", JEZIK),
             ["pca", "tsne"],
-            format_func=lambda m: "PCA (brzo)" if m == "pca" else "t-SNE (sporije, jasniji klasteri)",
+            format_func=lambda m: p.t("opcija_pca", JEZIK) if m == "pca" else p.t("opcija_tsne", JEZIK),
             horizontal=True,
             key="mapa_metoda",
         )
         koordinate = _cache_ugradnja(prostor, metoda_2d)
         st.altair_chart(
-            a.graf_mape(prostor, idx, koordinate, top10["NAME"].tolist(), metoda_2d),
+            a.graf_mape(prostor, idx, koordinate, top10["NAME"].tolist(), metoda_2d, JEZIK),
             use_container_width=True,
             theme=None,
         )
-        st.caption(
-            "Svih 1828 igrača u 2D prostoru u kojem model traži sličnost. "
-            "Veća claret točka je cilj, žute točke su njegovih 10 najsličnijih."
-        )
+        st.caption(p.t("caption_graf_mapa", JEZIK, n=len(prostor.df)))
 
     # 3) Jedinstvenost
-    if st.button("🎯 Generiraj graf jedinstvenosti", key="btn_jed"):
+    if st.button(p.t("btn_generiraj_jed", JEZIK), key="btn_jed"):
         st.session_state["prikazi_graf_jedinstvenosti"] = True
     if st.session_state.get("prikazi_graf_jedinstvenosti"):
         rezultati_svih, prosjek_top10, jedinstvenost = a.jedinstvenost(S, idx)
-        st.metric("Jedinstvenost", f"{jedinstvenost:.0f} / 100")
+        st.metric(p.t("metric_jedinstvenost", JEZIK), f"{jedinstvenost:.0f} / 100")
         st.altair_chart(
-            a.graf_jedinstvenosti(rezultati_svih, idx, prosjek_top10, naziv_metode.lower()),
+            a.graf_jedinstvenosti(rezultati_svih, idx, prosjek_top10, naziv_metode.lower(), JEZIK),
             use_container_width=True,
             theme=None,
         )
-        st.caption(
-            "Raspodjela sličnosti svih ostalih igrača prema cilju. Što je crta (prag top-10) "
-            "dalje od gomile, to je cilj rjeđi profil — 100 = najrjeđi u skupu, 0 = najzamjenjiviji."
-        )
+        st.caption(p.t("caption_graf_jed", JEZIK))
 
     st.divider()
-    st.caption(
-        "Podaci: https://theanalyst.com/, sezona 2025/26. Uloge su izvedene "
-        "K-Means klasteriranjem statistika."
-    )
+    st.caption(p.t("footer_igrac_stranica", JEZIK))
 
 
 _ime_iz_urla = st.query_params.get("igrac")
 if _ime_iz_urla:
     _idx_urla = _pronadi_tocno(prostor, _ime_iz_urla)
     if _idx_urla is None:
-        st.error(f"Igrač „{_ime_iz_urla}” nije pronađen u skupu podataka.")
-        if st.button("← Natrag na pretragu"):
+        st.error(p.t("greska_igrac_nije_pronadjen", JEZIK, ime=_ime_iz_urla))
+        if st.button(p.t("btn_natrag", JEZIK)):
             del st.query_params["igrac"]
             st.rerun()
     else:
@@ -377,76 +448,68 @@ if _ime_iz_urla:
 # Bočna traka — pretraga, metoda, napredne postavke, filtri
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### ⚽ Podudarnost")
-    st.caption(f"{len(prostor.df)} igrača · top-5 europskih liga")
+    zag1, zag2 = st.columns([2, 1])
+    with zag1:
+        st.markdown(f"### {p.t('app_brand', JEZIK)}")
+    with zag2:
+        st.markdown(f'<div style="padding-top:10px">{_jezik_toggle_html()}</div>', unsafe_allow_html=True)
+    st.caption(p.t("app_sidebar_subtitle", JEZIK, n=len(prostor.df)))
 
     imena = sorted(prostor.imena)
     zadano = "Bruno Fernandes" if "Bruno Fernandes" in imena else imena[0]
     igrac = st.selectbox(
-        "Igrač",
+        p.t("label_igrac", JEZIK),
         options=imena,
         index=imena.index(zadano),
-        help="Upiši dio imena za pretragu — lista se filtrira dok tipkaš.",
+        help=p.t("help_igrac", JEZIK),
     )
 
-    st.markdown("**Metoda**")
+    st.markdown(f"**{p.t('label_metoda', JEZIK)}**")
     metoda = st.radio(
-        "Metoda",
+        p.t("label_metoda", JEZIK),
         options=list(s.PRESETI.keys()),
-        format_func=lambda k: s.PRESETI[k]["naziv"],
+        format_func=lambda k: p.t(f"metoda_naziv_{k}", JEZIK),
         key="metoda_radio",
         index=list(s.PRESETI.keys()).index(st.session_state["metoda"]),
         on_change=_odaberi_metodu,
         label_visibility="collapsed",
     )
-    st.caption(s.PRESETI[st.session_state["metoda"]]["opis"])
+    st.caption(p.t(f"metoda_opis_{st.session_state['metoda']}", JEZIK))
 
-    with st.expander("Što znače metode?"):
-        for k, spec in s.PRESETI.items():
-            st.markdown(f"**{spec['naziv']}**")
-            st.caption(METODA_OBJASNJENJA[k])
+    with st.expander(p.t("label_sto_znace_metode", JEZIK)):
+        for k in s.PRESETI:
+            st.markdown(f"**{p.t(f'metoda_naziv_{k}', JEZIK)}**")
+            st.caption(p.t(f"metoda_objasnjenje_{k}", JEZIK))
 
-    with st.expander("Napredno", expanded=st.session_state["prilagodjeno"]):
+    with st.expander(p.t("label_napredno", JEZIK), expanded=st.session_state["prilagodjeno"]):
         st.select_slider(
-            "Stil ↔ količina",
+            p.t("label_stil_kolicina", JEZIK),
             options=ALPHA_OPCIJE,
             value=st.session_state["alpha"],
             format_func=lambda v: f"{v:.2f}",
             key="alpha_slider",
             on_change=_dodirnuo_napredno,
-            help=(
-                "Klizač bira što 'sličnost' znači. Skroz desno ('stil'): "
-                "traži igrače koji igraju na isti način, bez obzira igraju "
-                "li malo ili puno. Skroz lijevo ('količina'): traži igrače "
-                "koji ostvaruju sličan BROJ istih akcija — golova, "
-                "dodavanja — čak i ako im je stil drugačiji. Sredina je "
-                "mješavina to dvoje."
-            ),
+            help=p.t("help_stil_kolicina", JEZIK),
         )
         st.checkbox(
-            "Uvaži povezanost statistika",
+            p.t("label_uvazi_povezanost", JEZIK),
             value=st.session_state["koristi_M"],
             key="matM_checkbox",
             on_change=_dodirnuo_napredno,
-            help=(
-                "Kad je uključeno, model zna da su neke statistike "
-                "prirodno povezane (npr. dodavanja i dodavanja u završnu "
-                "trećinu) pa ih ne tretira kao potpuno nezavisne. Obično "
-                "daje profinjenije rezultate."
-            ),
+            help=p.t("help_uvazi_povezanost", JEZIK),
         )
         if st.session_state["prilagodjeno"]:
-            st.caption("Prilagođeno — više ne prati odabranu metodu iznad.")
+            st.caption(p.t("caption_prilagodjeno", JEZIK))
 
-    st.markdown("**Filtri**")
-    ista_uloga = st.checkbox("Samo ista uloga", value=False, key="ista_uloga_checkbox")
-    izbaci_ligu = st.checkbox("Izbaci istu ligu", value=False, key="izbaci_ligu_checkbox")
+    st.markdown(f"**{p.t('label_filtri', JEZIK)}**")
+    ista_uloga = st.checkbox(p.t("label_ista_uloga", JEZIK), value=False, key="ista_uloga_checkbox")
+    izbaci_ligu = st.checkbox(p.t("label_izbaci_ligu", JEZIK), value=False, key="izbaci_ligu_checkbox")
     min_minuta = st.slider(
-        "Najmanje minuta", min_value=450, max_value=3420, value=450, step=90,
+        p.t("label_min_minuta", JEZIK), min_value=450, max_value=3420, value=450, step=90,
         key="min_minuta_slider",
     )
     n_rezultata = st.slider(
-        "Broj rezultata", min_value=5, max_value=25, value=10, key="n_rezultata_slider"
+        p.t("label_broj_rezultata", JEZIK), min_value=5, max_value=25, value=10, key="n_rezultata_slider"
     )
 
 # ---------------------------------------------------------------------------
@@ -480,30 +543,32 @@ with top1:
     st.markdown(f'<div class="target-name">{html.escape(cilj["NAME"])}</div>', unsafe_allow_html=True)
 with top2:
     st.markdown(
-        f'<div style="padding-top:10px"><span class="chip">{html.escape(cilj["ULOGA"])}</span></div>',
+        f'<div style="padding-top:10px"><span class="chip">{html.escape(p.prevedi_ulogu(cilj["ULOGA"], JEZIK))}</span></div>',
         unsafe_allow_html=True,
     )
 with top3:
     liga = f'{cilj["LEAGUE"]} · ' if prostor.ima_lige else ""
+    meta = p.t(
+        "meta_nastupa_minuta", JEZIK,
+        apps=int(cilj["APPS"]), mins=p.formatiraj_broj(int(cilj["MINS"]), JEZIK),
+    )
     st.markdown(
-        f'<div style="padding-top:14px" class="target-meta">'
-        f'{liga}{int(cilj["APPS"])} nastupa · {int(cilj["MINS"]):,} minuta</div>'
-        .replace(",", "."),
+        f'<div style="padding-top:14px" class="target-meta">{liga}{meta}</div>',
         unsafe_allow_html=True,
     )
 with top4:
-    if st.button("Profil i grafovi →", key="prof_cilj"):
+    if st.button(p.t("btn_profil_i_grafovi", JEZIK), key="prof_cilj"):
         st.query_params["igrac"] = cilj["NAME"]
         st.rerun()
 
-st.markdown('<div class="section-label">Profil — najizraženije značajke</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="section-label">{p.t("label_profil_znacajke", JEZIK)}</div>', unsafe_allow_html=True)
 
 z_ciljni = prostor.X[idx]
 najistaknutije = np.argsort(-np.abs(z_ciljni))[:6]
 redci = []
 for j in najistaknutije:
     z = float(z_ciljni[j])
-    naziv = s.NAZIVI.get(prostor.znacajke[j], prostor.znacajke[j])
+    naziv = p.znacajka(prostor.znacajke[j], JEZIK)
     w = min(abs(z) / 6, 1) * 50
     stil = f"left:50%;width:{w}%;background:var(--pos);" if z >= 0 else f"right:50%;width:{w}%;background:var(--neg);"
     predznak = "+" if z >= 0 else ""
@@ -519,15 +584,10 @@ st.divider()
 # ---------------------------------------------------------------------------
 # Rezultati
 # ---------------------------------------------------------------------------
-naziv_nacina = (
-    f"prilagođeno · α = {st.session_state['alpha']:.2f}"
-    if st.session_state["prilagodjeno"]
-    else s.PRESETI[st.session_state["metoda"]]["naziv"].lower()
-)
-st.markdown(f"**{len(rezultati)} najsličnijih igrača** &nbsp;·&nbsp; {naziv_nacina}")
+st.markdown(f"**{p.t('najslicnijih_igraca', JEZIK, n=len(rezultati))}** &nbsp;·&nbsp; {_naziv_metode(JEZIK).lower()}")
 
 if len(rezultati) == 0:
-    st.info("Nijedan igrač ne zadovoljava odabrane filtre.")
+    st.info(p.t("nijedan_igrac_filtri", JEZIK))
 else:
     maks = float(rezultati["SLICNOST"].max()) or 1.0
 
@@ -539,14 +599,14 @@ else:
     with head_cols[0]:
         st.markdown('<div class="row-head-label">&nbsp;</div>', unsafe_allow_html=True)
     with head_cols[1]:
-        st.markdown('<div class="row-head-label">Igrač / uloga</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="row-head-label">{p.t("col_igrac_uloga", JEZIK)}</div>', unsafe_allow_html=True)
     with head_cols[2]:
         st.markdown(
             '<div style="display:grid;grid-template-columns:1fr 70px 60px 90px;gap:12px">'
-            '<span class="row-head-label">Liga</span>'
-            '<span class="row-head-label" style="text-align:right">Min.</span>'
+            f'<span class="row-head-label">{p.t("word_liga", JEZIK)}</span>'
+            f'<span class="row-head-label" style="text-align:right">{p.t("word_min", JEZIK)}</span>'
             '<span class="row-head-label"></span>'
-            '<span class="row-head-label" style="text-align:right">Sličnost</span></div>',
+            f'<span class="row-head-label" style="text-align:right">{p.t("word_slicnost", JEZIK)}</span></div>',
             unsafe_allow_html=True,
         )
     with head_cols[3]:
@@ -565,26 +625,28 @@ else:
                 unsafe_allow_html=True,
             )
         with cols[1]:
+            uloga_r = html.escape(p.prevedi_ulogu(r["ULOGA"], JEZIK))
             st.markdown(
                 f'<div style="padding:8px 0"><span class="rname">{html.escape(r["NAME"])}</span><br>'
-                f'<span class="rrole">{html.escape(r["ULOGA"])}</span></div>',
+                f'<span class="rrole">{uloga_r}</span></div>',
                 unsafe_allow_html=True,
             )
         with cols[2]:
+            min_txt = p.formatiraj_broj(int(r["MINS"]), JEZIK)
             st.markdown(
                 f'<div style="padding:8px 0;display:grid;grid-template-columns:1fr 70px 60px 90px;'
                 f'gap:12px;align-items:center">'
                 f'<span class="rliga">{liga_txt}</span>'
-                f'<span class="rmin">{int(r["MINS"]):,}′</span>'.replace(",", ".") +
+                f'<span class="rmin">{min_txt}′</span>'
                 f'<span class="meter"><i style="width:{sirina}%"></i></span>'
                 f'<span class="rscore">{r["SLICNOST"]:.1f} %</span></div>',
                 unsafe_allow_html=True,
             )
         with cols[3]:
-            if st.button("Usporedi ↓", key=f"cmp_{i}_{r['NAME']}"):
+            if st.button(p.t("btn_usporedi", JEZIK), key=f"cmp_{i}_{r['NAME']}"):
                 st.session_state["usporedba_s"] = r["NAME"]
         with cols[4]:
-            if st.button("Profil →", key=f"prof_{i}_{r['NAME']}"):
+            if st.button(p.t("btn_profil", JEZIK), key=f"prof_{i}_{r['NAME']}"):
                 st.query_params["igrac"] = r["NAME"]
                 st.rerun()
 
@@ -595,12 +657,17 @@ if st.session_state["usporedba_s"] and len(rezultati):
     st.divider()
     drugi_idx = s.pronadi_igraca(prostor, st.session_state["usporedba_s"])[0]
     razlika = s.usporedi_profile(prostor, idx, drugi_idx)
+    razlika["znacajka"] = razlika["znacajka"].map(
+        lambda naziv_hr: p.t(
+            f"znacajka_{s.NAZIVI_OBRNUTO.get(naziv_hr, '')}", JEZIK
+        ) if f"znacajka_{s.NAZIVI_OBRNUTO.get(naziv_hr, '')}" in p.T else naziv_hr
+    )
 
     st.markdown(
         f"**{html.escape(cilj['NAME'])}** &nbsp;↔&nbsp; "
         f"**{html.escape(st.session_state['usporedba_s'])}**"
     )
-    st.caption("Standardizirane (z) vrijednosti — 0 je prosjek lige na toj statistici.")
+    st.caption(p.t("caption_standardizirane", JEZIK))
 
     lijevo, desno = st.columns(2)
 
@@ -623,13 +690,9 @@ if st.session_state["usporedba_s"] and len(rezultati):
         return "".join(redci)
 
     with lijevo:
-        st.markdown(_crtaj_razlaganje("Najveće razlike", razlika.head(4)), unsafe_allow_html=True)
+        st.markdown(_crtaj_razlaganje(p.t("najvece_razlike", JEZIK), razlika.head(4)), unsafe_allow_html=True)
     with desno:
-        st.markdown(_crtaj_razlaganje("Najbliže podudaranje", razlika.tail(4)), unsafe_allow_html=True)
+        st.markdown(_crtaj_razlaganje(p.t("najblize_podudaranje", JEZIK), razlika.tail(4)), unsafe_allow_html=True)
 
 st.divider()
-st.caption(
-    "Podaci: https://theanalyst.com/, sezona 2025/26 (podaci/top5_stats_combined.csv). "
-    "Uloge su izvedene K-Means klasteriranjem statistika — skup podataka nema stupac s "
-    "pozicijom, pa 'uloga' opisuje stil igre, ne službenu poziciju."
-)
+st.caption(p.t("footer_glavna", JEZIK))

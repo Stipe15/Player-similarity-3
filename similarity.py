@@ -127,6 +127,10 @@ NAZIVI = {
     "PAS_THROUGH BALLS": "ubačaji iza obrane",
 }
 
+# Obrnuto preslikavanje (hrvatski naziv -> naziv stupca), za prikaze (npr.
+# dvojezično sučelje) koji trebaju krenuti od NAZIVI izlaza unatrag do ključa.
+NAZIVI_OBRNUTO = {v: k for k, v in NAZIVI.items()}
+
 # Presetovi: (α, koristi_M, je_udaljenost) — vidi dokumentaciju modula.
 PRESETI = {
     "soft_cosine": {

@@ -19,6 +19,7 @@ from scipy.stats import rankdata
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
+import prijevodi as p
 import similarity as s
 
 # ---------------------------------------------------------------------------
@@ -171,7 +172,7 @@ def primijeni_temu(graf: alt.Chart) -> alt.Chart:
 
 
 def graf_percentila(
-    prostor: s.ProstorIgraca, idx: int, pct: np.ndarray, osnovica: str
+    prostor: s.ProstorIgraca, idx: int, pct: np.ndarray, osnovica: str, jezik: str = "hr"
 ) -> alt.Chart:
     """Vodoravne trake: percentil igrača po svakoj značajci, po obiteljima.
 
@@ -182,16 +183,17 @@ def graf_percentila(
     for j, stupac in enumerate(prostor.znacajke):
         redci.append(
             {
-                "znacajka": s.NAZIVI.get(stupac, stupac),
+                "znacajka": p.znacajka(stupac, jezik),
                 "percentil": float(pct[idx, j]),
-                "kategorija": kategorija(stupac),
+                "kategorija": p.kategorija_naziv(kategorija(stupac), jezik),
                 "vrijednost": float(prostor.df.iloc[idx][stupac]),
             }
         )
     df = pd.DataFrame(redci)
 
     # Unutar obitelji sortiramo silazno po percentilu; obitelji idu redom.
-    redoslijed_kat = [k for k in BOJE_KATEGORIJA if k in set(df["kategorija"])]
+    domena_kat = [p.kategorija_naziv(k, jezik) for k in BOJE_KATEGORIJA]
+    redoslijed_kat = [k for k in domena_kat if k in set(df["kategorija"])]
     df["_k"] = df["kategorija"].map({k: i for i, k in enumerate(redoslijed_kat)})
     df = df.sort_values(["_k", "percentil"], ascending=[True, False])
     poredak = df["znacajka"].tolist()
@@ -203,21 +205,19 @@ def graf_percentila(
             x=alt.X(
                 "percentil:Q",
                 scale=alt.Scale(domain=[0, 100]),
-                title=f"percentil ({osnovica})",
+                title=p.t("graf_pct_x_title", jezik, osnovica=osnovica),
             ),
             y=alt.Y("znacajka:N", sort=poredak, title=None),
             color=alt.Color(
                 "kategorija:N",
-                scale=alt.Scale(
-                    domain=list(BOJE_KATEGORIJA), range=list(BOJE_KATEGORIJA.values())
-                ),
+                scale=alt.Scale(domain=domena_kat, range=list(BOJE_KATEGORIJA.values())),
                 legend=alt.Legend(title=None, orient="top"),
             ),
             tooltip=[
-                alt.Tooltip("znacajka:N", title="statistika"),
-                alt.Tooltip("vrijednost:Q", title="per 90", format=".2f"),
-                alt.Tooltip("percentil:Q", title="percentil", format=".0f"),
-                alt.Tooltip("kategorija:N", title="obitelj"),
+                alt.Tooltip("znacajka:N", title=p.t("graf_pct_tt_statistika", jezik)),
+                alt.Tooltip("vrijednost:Q", title=p.t("graf_pct_tt_per90", jezik), format=".2f"),
+                alt.Tooltip("percentil:Q", title=p.t("graf_pct_tt_percentil", jezik), format=".0f"),
+                alt.Tooltip("kategorija:N", title=p.t("graf_pct_tt_obitelj", jezik)),
             ],
         )
     )
@@ -237,19 +237,25 @@ def graf_mape(
     koordinate: np.ndarray,
     slicni: list[str],
     metoda: str,
+    jezik: str = "hr",
 ) -> alt.Chart:
     """Mapa sličnosti: svi igrači u 2D, s istaknutim ciljem i njegovim susjedima.
 
     Ovo je jedini graf koji pokazuje sam PROSTOR u kojem model traži sličnost —
     pa se vidi zašto su ciljevi susjedi to što jesu.
+
+    Interni nazivi stupaca ("player"/"role"/"league") ostaju fiksni engleski
+    Vega-referenci bez obzira na jezik prikaza; prevedeni naslovi idu preko
+    `alt.Tooltip(title=...)`, tako da promjena jezika ne dira kodiranja polja.
     """
+    uloge_prevedene = [p.prevedi_ulogu(u, jezik) for u in prostor.df["ULOGA"]]
     df = pd.DataFrame(
         {
             "x": koordinate[:, 0],
             "y": koordinate[:, 1],
-            "Igrač": prostor.df["NAME"].to_numpy(),
-            "Uloga": prostor.df["ULOGA"].to_numpy(),
-            "Liga": prostor.df["LEAGUE"].to_numpy()
+            "player": prostor.df["NAME"].to_numpy(),
+            "role": uloge_prevedene,
+            "league": prostor.df["LEAGUE"].to_numpy()
             if prostor.ima_lige
             else "—",
         }
@@ -257,13 +263,13 @@ def graf_mape(
 
     cilj_ime = prostor.df.iloc[idx]["NAME"]
     df_ostali = df.drop(index=idx)
-    df_susjedi = df[df["Igrač"].isin(slicni)]
+    df_susjedi = df[df["player"].isin(slicni)]
     df_cilj = df.iloc[[idx]]
 
     opisi = [
-        alt.Tooltip("Igrač:N"),
-        alt.Tooltip("Uloga:N"),
-        alt.Tooltip("Liga:N"),
+        alt.Tooltip("player:N", title=p.t("word_igrac", jezik)),
+        alt.Tooltip("role:N", title=p.t("word_uloga", jezik)),
+        alt.Tooltip("league:N", title=p.t("word_liga", jezik)),
     ]
 
     oblak = (
@@ -272,7 +278,7 @@ def graf_mape(
         .encode(
             x=alt.X("x:Q", title=None, axis=alt.Axis(labels=False, ticks=False)),
             y=alt.Y("y:Q", title=None, axis=alt.Axis(labels=False, ticks=False)),
-            color=alt.Color("Uloga:N", legend=alt.Legend(title=None, orient="top", columns=2)),
+            color=alt.Color("role:N", legend=alt.Legend(title=None, orient="top", columns=2)),
             tooltip=opisi,
         )
     )
@@ -297,7 +303,7 @@ def graf_mape(
 
     graf = (
         (oblak + susjedi + tocka_cilja + natpis)
-        .properties(height=520, title=f"Svi igrači u 2D prostoru ({metoda.upper()})")
+        .properties(height=520, title=p.t("graf_mapa_naslov", jezik, metoda=metoda.upper()))
         .interactive()
         .resolve_scale(color="independent")
     )
@@ -305,7 +311,7 @@ def graf_mape(
 
 
 def graf_jedinstvenosti(
-    rezultati: np.ndarray, idx: int, prag_top: float, mjera: str
+    rezultati: np.ndarray, idx: int, prag_top: float, mjera: str, jezik: str = "hr"
 ) -> alt.Chart:
     """Histogram sličnosti svih ostalih igrača prema cilju.
 
@@ -320,16 +326,16 @@ def graf_jedinstvenosti(
         alt.Chart(df)
         .mark_bar(color=AKCENT, opacity=0.85)
         .encode(
-            x=alt.X("slicnost:Q", bin=alt.Bin(maxbins=45), title=f"sličnost ({mjera})"),
-            y=alt.Y("count():Q", title="broj igrača"),
-            tooltip=[alt.Tooltip("count():Q", title="igrača")],
+            x=alt.X("slicnost:Q", bin=alt.Bin(maxbins=45), title=p.t("graf_jed_x_title", jezik, mjera=mjera)),
+            y=alt.Y("count():Q", title=p.t("graf_jed_y_title", jezik)),
+            tooltip=[alt.Tooltip("count():Q", title=p.t("graf_jed_tt_igraca", jezik))],
         )
     )
 
     granica = (
         alt.Chart(pd.DataFrame({"x": [prag_top]}))
         .mark_rule(color=TEKST_JAK, strokeDash=[5, 4], size=1.5)
-        .encode(x="x:Q", tooltip=alt.value("prag 10 najsličnijih"))
+        .encode(x="x:Q", tooltip=alt.value(p.t("graf_jed_tt_prag", jezik)))
     )
 
     return primijeni_temu((histogram + granica).properties(height=300))
