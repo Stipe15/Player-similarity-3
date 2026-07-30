@@ -11,18 +11,41 @@ Pokretanje lokalno:
 from __future__ import annotations
 
 import html
+from pathlib import Path
 
 import numpy as np
 import streamlit as st
 
 import similarity as s
 
+# "?app=1" razlikuje početnu (marketinšku) stranicu od stvarnog alata, tako da
+# oba CTA gumba na landing.html mogu voditi ovamo običnim <a href="?app=1">.
+JE_POCETNA = st.query_params.get("app") != "1"
+
 st.set_page_config(
     page_title="Podudarnost — tražilica sličnih igrača",
     page_icon="⚽",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed" if JE_POCETNA else "expanded",
 )
+
+if JE_POCETNA:
+    st.markdown(
+        """
+        <style>
+        .block-container{padding:0 !important;max-width:100% !important;}
+        header[data-testid="stHeader"]{background:transparent;}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    landing_html = (Path(__file__).parent / "landing.html").read_text(encoding="utf-8")
+    # st.markdown() koristi Python-Markdown ispod haube: prazan redak usred bloka
+    # sirovog HTML-a prekida "raw HTML" način rada, pa sve nakon njega završi kao
+    # escapean tekst umjesto pravih oznaka. Uklanjamo prazne retke da to spriječimo.
+    landing_html = "\n".join(line for line in landing_html.splitlines() if line.strip())
+    st.markdown(landing_html, unsafe_allow_html=True)
+    st.stop()
 
 # ---------------------------------------------------------------------------
 # Izgled — usklađeno s odobrenom maketom (claret akcent, serif za istaknuta
