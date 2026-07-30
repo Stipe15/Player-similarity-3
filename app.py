@@ -14,8 +14,10 @@ import html
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import streamlit as st
 
+import analitika as a
 import similarity as s
 
 # "?app=1" razlikuje početnu (marketinšku) stranicu od stvarnog alata, tako da
@@ -122,6 +124,43 @@ def _ucitaj() -> s.ProstorIgraca:
 
 prostor = _ucitaj()
 
+
+# ---------------------------------------------------------------------------
+# Analitika (stranica igrača) — cachirano jer je 2D ugradnja i matrica
+# sličnosti isti izračun za SVAKOG igrača; mijenja se samo tko je istaknut.
+# Vodeća podvlaka u imenu argumenta govori Streamlitu da preskoči hashiranje
+# `prostor` objekta (sadrži numpy nizove, skupo za hashiranje svaki rerun).
+# ---------------------------------------------------------------------------
+@st.cache_data(show_spinner="Računam percentile…")
+def _cache_percentili(_prostor: s.ProstorIgraca) -> np.ndarray:
+    return a.percentili(_prostor)
+
+
+@st.cache_data(show_spinner="Računam percentile unutar uloga…")
+def _cache_percentili_uloga(_prostor: s.ProstorIgraca) -> np.ndarray:
+    return a.percentili_po_ulozi(_prostor)
+
+
+@st.cache_data(show_spinner="Računam 2D projekciju (t-SNE traje malo dulje)…")
+def _cache_ugradnja(_prostor: s.ProstorIgraca, metoda: str) -> np.ndarray:
+    return a.ugradnja_2d(_prostor, metoda)
+
+
+@st.cache_data(show_spinner="Računam matricu sličnosti…")
+def _cache_matrica(_prostor: s.ProstorIgraca, alpha: float, koristi_M: bool) -> np.ndarray:
+    return a.matrica_slicnosti(_prostor, alpha=alpha, koristi_M=koristi_M)
+
+
+def _pronadi_tocno(prostor: s.ProstorIgraca, ime: str) -> int | None:
+    """Točno (ne fuzzy) podudaranje imena — sigurno za razrješavanje URL-a.
+
+    `similarity.pronadi_igraca` namjerno dopušta djelomično podudaranje radi
+    pretrage; ovdje to NIJE poželjno jer bi URL mogao razriješiti pogrešnog
+    igrača (npr. ?igrac=Nico bi trebao dati grešku, ne prvog 'Nico *').
+    """
+    poklapanja = prostor.df.index[prostor.df["NAME"] == ime]
+    return int(poklapanja[0]) if len(poklapanja) else None
+
 METODA_OBJASNJENJA = {
     "soft_cosine": (
         "Zadano. Traži igrače sličnog STILA igre, a pritom uvažava da su "
@@ -176,6 +215,165 @@ def _dodirnuo_napredno() -> None:
 
 
 _init_stanje()
+
+
+# ---------------------------------------------------------------------------
+# Stranica pojedinog igrača — puna statistika + analitički grafovi na zahtjev
+# ---------------------------------------------------------------------------
+def _prikazi_zaglavlje_igraca(cilj: pd.Series, prostor: s.ProstorIgraca) -> None:
+    top1, top2, top3 = st.columns([3, 1, 2])
+    with top1:
+        st.markdown(f'<div class="target-name">{html.escape(cilj["NAME"])}</div>', unsafe_allow_html=True)
+    with top2:
+        st.markdown(
+            f'<div style="padding-top:10px"><span class="chip">{html.escape(cilj["ULOGA"])}</span></div>',
+            unsafe_allow_html=True,
+        )
+    with top3:
+        liga = f'{cilj["LEAGUE"]} · ' if prostor.ima_lige else ""
+        st.markdown(
+            f'<div style="padding-top:14px" class="target-meta">'
+            f'{liga}{int(cilj["APPS"])} nastupa · {int(cilj["MINS"]):,} minuta</div>'.replace(",", "."),
+            unsafe_allow_html=True,
+        )
+
+
+def _stranica_igraca(prostor: s.ProstorIgraca, idx: int) -> None:
+    cilj = prostor.df.iloc[idx]
+    ime = cilj["NAME"]
+
+    if st.button("← Natrag na pretragu"):
+        del st.query_params["igrac"]
+        st.rerun()
+
+    _prikazi_zaglavlje_igraca(cilj, prostor)
+    st.divider()
+
+    # --- puna tablica statistika -------------------------------------------------
+    st.markdown('<div class="section-label">Sve statistike</div>', unsafe_allow_html=True)
+    naziv_uloge = cilj["ULOGA"]
+    osnovica = st.radio(
+        "Percentil u odnosu na:",
+        ["Sve igrače", f"Istu ulogu ({naziv_uloge})"],
+        horizontal=True,
+        key="percentil_osnovica",
+        help=(
+            "Postotak dodavanja stopera znači nešto drugo naspram napadača nego "
+            "naspram drugih stopera — obje osnovice su korisne."
+        ),
+    )
+    prema_ulozi = osnovica.startswith("Istu")
+    pct = _cache_percentili_uloga(prostor) if prema_ulozi else _cache_percentili(prostor)
+    osnovica_txt = f"uloga: {naziv_uloge}" if prema_ulozi else "svi igrači"
+
+    tablica = pd.DataFrame(
+        {
+            "Statistika": [s.NAZIVI.get(c, c) for c in prostor.znacajke],
+            "Obitelj": [a.kategorija(c) for c in prostor.znacajke],
+            "Per 90": [float(cilj[c]) for c in prostor.znacajke],
+            "Z-vrijednost": prostor.X[idx].round(2),
+            "Percentil": pct[idx].round(1),
+        }
+    ).sort_values("Percentil", ascending=False, ignore_index=True)
+
+    st.dataframe(
+        tablica,
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Percentil": st.column_config.ProgressColumn(
+                "Percentil", min_value=0, max_value=100, format="%.0f"
+            ),
+            "Per 90": st.column_config.NumberColumn("Per 90", format="%.2f"),
+            "Z-vrijednost": st.column_config.NumberColumn("Z-vrijednost", format="%+.2f"),
+        },
+    )
+
+    st.divider()
+
+    # --- grafovi na zahtjev -------------------------------------------------------
+    naziv_metode = s.PRESETI[st.session_state["metoda"]]["naziv"] if not st.session_state["prilagodjeno"] else f"prilagođeno (α={st.session_state['alpha']:.2f})"
+    st.markdown('<div class="section-label">Analitički grafovi</div>', unsafe_allow_html=True)
+    st.caption(
+        f"Grafovi sličnosti ispod koriste trenutno odabranu metodu na stranici za "
+        f"pretragu: **{naziv_metode}**."
+    )
+
+    # 1) Profil percentila
+    if st.button("📊 Generiraj profil percentila", key="btn_pct"):
+        st.session_state["prikazi_graf_percentila"] = True
+    if st.session_state.get("prikazi_graf_percentila"):
+        st.altair_chart(
+            a.graf_percentila(prostor, idx, pct, osnovica_txt), use_container_width=True, theme=None
+        )
+        st.caption(
+            "Percentil po svakoj od 29 statistika, grupirano po obitelji. "
+            "Isprekidana crta je medijan (50. percentil)."
+        )
+
+    # zajednički izračun za preostala dva grafa (sličnost prema svim igračima)
+    S = _cache_matrica(prostor, st.session_state["alpha"], st.session_state["koristi_M"])
+    top10 = s.slicni_igraci(
+        prostor, idx, preset=None, alpha=st.session_state["alpha"],
+        koristi_M=st.session_state["koristi_M"], n=10,
+    )
+
+    # 2) Mapa sličnosti
+    if st.button("🗺️ Generiraj mapu sličnosti", key="btn_mapa"):
+        st.session_state["prikazi_graf_mape"] = True
+    if st.session_state.get("prikazi_graf_mape"):
+        metoda_2d = st.radio(
+            "2D metoda",
+            ["pca", "tsne"],
+            format_func=lambda m: "PCA (brzo)" if m == "pca" else "t-SNE (sporije, jasniji klasteri)",
+            horizontal=True,
+            key="mapa_metoda",
+        )
+        koordinate = _cache_ugradnja(prostor, metoda_2d)
+        st.altair_chart(
+            a.graf_mape(prostor, idx, koordinate, top10["NAME"].tolist(), metoda_2d),
+            use_container_width=True,
+            theme=None,
+        )
+        st.caption(
+            "Svih 1828 igrača u 2D prostoru u kojem model traži sličnost. "
+            "Veća claret točka je cilj, žute točke su njegovih 10 najsličnijih."
+        )
+
+    # 3) Jedinstvenost
+    if st.button("🎯 Generiraj graf jedinstvenosti", key="btn_jed"):
+        st.session_state["prikazi_graf_jedinstvenosti"] = True
+    if st.session_state.get("prikazi_graf_jedinstvenosti"):
+        rezultati_svih, prosjek_top10, jedinstvenost = a.jedinstvenost(S, idx)
+        st.metric("Jedinstvenost", f"{jedinstvenost:.0f} / 100")
+        st.altair_chart(
+            a.graf_jedinstvenosti(rezultati_svih, idx, prosjek_top10, naziv_metode.lower()),
+            use_container_width=True,
+            theme=None,
+        )
+        st.caption(
+            "Raspodjela sličnosti svih ostalih igrača prema cilju. Što je crta (prag top-10) "
+            "dalje od gomile, to je cilj rjeđi profil — 100 = najrjeđi u skupu, 0 = najzamjenjiviji."
+        )
+
+    st.divider()
+    st.caption(
+        "Podaci: https://theanalyst.com/, sezona 2025/26. Uloge su izvedene "
+        "K-Means klasteriranjem statistika."
+    )
+
+
+_ime_iz_urla = st.query_params.get("igrac")
+if _ime_iz_urla:
+    _idx_urla = _pronadi_tocno(prostor, _ime_iz_urla)
+    if _idx_urla is None:
+        st.error(f"Igrač „{_ime_iz_urla}” nije pronađen u skupu podataka.")
+        if st.button("← Natrag na pretragu"):
+            del st.query_params["igrac"]
+            st.rerun()
+    else:
+        _stranica_igraca(prostor, _idx_urla)
+    st.stop()
 
 # ---------------------------------------------------------------------------
 # Bočna traka — pretraga, metoda, napredne postavke, filtri
@@ -279,7 +477,7 @@ if st.session_state["usporedba_s"] not in set(rezultati["NAME"]):
 # ---------------------------------------------------------------------------
 # Glavni prostor — cilj i njegov profil
 # ---------------------------------------------------------------------------
-top1, top2, top3 = st.columns([3, 1, 2])
+top1, top2, top3, top4 = st.columns([3, 1, 1.6, 1])
 with top1:
     st.markdown(f'<div class="target-name">{html.escape(cilj["NAME"])}</div>', unsafe_allow_html=True)
 with top2:
@@ -295,6 +493,10 @@ with top3:
         .replace(",", "."),
         unsafe_allow_html=True,
     )
+with top4:
+    if st.button("Profil i grafovi →", key="prof_cilj"):
+        st.query_params["igrac"] = cilj["NAME"]
+        st.rerun()
 
 st.markdown('<div class="section-label">Profil — najizraženije značajke</div>', unsafe_allow_html=True)
 
@@ -338,7 +540,7 @@ else:
     for i, r in rezultati.iterrows():
         sirina = max(4, (r["SLICNOST"] / maks) * 100)
         liga_txt = html.escape(r["LEAGUE"]) if prostor.ima_lige else ""
-        cols = st.columns([0.04, 0.30, 1, 0.14], gap="small")
+        cols = st.columns([0.04, 0.30, 1, 0.13, 0.13], gap="small")
         with cols[0]:
             st.markdown(
                 f'<div class="row" style="grid-template-columns:26px 1fr;border-bottom:none;padding:8px 0">'
@@ -364,6 +566,10 @@ else:
         with cols[3]:
             if st.button("Usporedi ↓", key=f"cmp_{i}_{r['NAME']}"):
                 st.session_state["usporedba_s"] = r["NAME"]
+        with cols[4]:
+            if st.button("Profil →", key=f"prof_{i}_{r['NAME']}"):
+                st.query_params["igrac"] = r["NAME"]
+                st.rerun()
 
 # ---------------------------------------------------------------------------
 # Panel usporedbe — zašto su dva igrača slična/različita
