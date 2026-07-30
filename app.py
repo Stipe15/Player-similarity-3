@@ -99,11 +99,9 @@ st.markdown(
 .meter i{display:block;height:100%;background:var(--accent);border-radius:3px;}
 .rscore{font-family:var(--font-mono);font-size:12.5px;
   font-variant-numeric:tabular-nums;text-align:right;color:var(--ink);}
-.row-head{display:grid;
-  grid-template-columns:26px minmax(130px,1.1fr) minmax(0,1.1fr) 92px 56px 100px;
-  gap:12px;padding:0 4px 6px;font-size:11px;letter-spacing:.08em;
-  text-transform:uppercase;color:var(--ink-3);font-weight:600;
-  border-bottom:1px solid var(--line);}
+.row-head-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:600;padding-bottom:6px;
+  border-bottom:1px solid var(--line);display:block;}
 .flag{border-left:3px solid var(--accent);background:var(--accent-wash);
   padding:10px 14px;font-size:13.5px;color:var(--ink-2);border-radius:0 4px 4px 0;
   margin-bottom:6px;}
@@ -532,11 +530,30 @@ if len(rezultati) == 0:
     st.info("Nijedan igrač ne zadovoljava odabrane filtre.")
 else:
     maks = float(rezultati["SLICNOST"].max()) or 1.0
-    st.markdown(
-        '<div class="row-head"><span></span><span>Igrač</span><span>Uloga</span>'
-        '<span>Liga</span><span>Min.</span><span>Sličnost</span></div>',
-        unsafe_allow_html=True,
-    )
+
+    # Zaglavlje mora dijeliti IDENTIČNU strukturu stupaca kao retci ispod (isti
+    # st.columns tjedine, ista unutarnja mreža unutar cols[2]) — ranije je
+    # zaglavlje bilo zaseban, ručno namješten CSS grid koji se s pravim
+    # retcima poklapao tek slučajno, pa se raspao čim je dodan 5. stupac.
+    head_cols = st.columns([0.04, 0.30, 1, 0.13, 0.13], gap="small")
+    with head_cols[0]:
+        st.markdown('<div class="row-head-label">&nbsp;</div>', unsafe_allow_html=True)
+    with head_cols[1]:
+        st.markdown('<div class="row-head-label">Igrač / uloga</div>', unsafe_allow_html=True)
+    with head_cols[2]:
+        st.markdown(
+            '<div style="display:grid;grid-template-columns:1fr 70px 60px 90px;gap:12px">'
+            '<span class="row-head-label">Liga</span>'
+            '<span class="row-head-label" style="text-align:right">Min.</span>'
+            '<span class="row-head-label"></span>'
+            '<span class="row-head-label" style="text-align:right">Sličnost</span></div>',
+            unsafe_allow_html=True,
+        )
+    with head_cols[3]:
+        st.markdown('<div class="row-head-label">&nbsp;</div>', unsafe_allow_html=True)
+    with head_cols[4]:
+        st.markdown('<div class="row-head-label">&nbsp;</div>', unsafe_allow_html=True)
+
     for i, r in rezultati.iterrows():
         sirina = max(4, (r["SLICNOST"] / maks) * 100)
         liga_txt = html.escape(r["LEAGUE"]) if prostor.ima_lige else ""
