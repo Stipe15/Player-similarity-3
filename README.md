@@ -6,6 +6,8 @@ Type a name, get a ranked list of statistical look-alikes, and dig into per-play
 
 Built on 2025/26 season data (1,828 players, 29 per-90 stats, 5 leagues), with a Streamlit interface in Croatian and English.
 
+https://player-similarity-3-nevh4zd8c2da3wlgxkzaiz.streamlit.app/
+
 ## How it works
 
 Four "similarity metrics" — cosine, soft-cosine, Euclidean, dot product — turn out to be two knobs on one formula:
