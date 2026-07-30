@@ -112,7 +112,7 @@ NAZIVI = {
     "DEF_TACKLES": "oduzimanja",
     "DEF_INTS": "presijecanja",
     "DEF_POS WON": "osvojene lopte",
-    "DEF_BLOCKS": "blokade",
+    "DEF_BLOCKS": "blokovi",
     "DEF_CLEARANCES": "izbijanja",
     "DEF_TOTAL (GROUND DUELS)": "duel na tlu",
     "DEF_% (GROUND DUELS)": "% duela na tlu",

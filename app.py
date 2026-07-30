@@ -34,10 +34,10 @@ st.markdown(
     """
 <style>
 :root{
-  --ink:#171A1F; --ink-2:#5D646E; --ink-3:#878E98;
-  --line:#E1E4E9; --surface:#FFFFFF; --surface-2:#F7F8F9;
-  --accent:#96263D; --accent-wash:#F7EAED; --track:#E7E9EC;
-  --pos:#96263D; --neg:#5D646E;
+  --ink:#E9EBEE; --ink-2:#9AA2AC; --ink-3:#6E7681;
+  --line:#262C34; --surface:#161A1F; --surface-2:#1B2027;
+  --accent:#D9637A; --accent-wash:#2A171C; --track:#232931;
+  --pos:#D9637A; --neg:#7E8792;
   --font-display:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
   --font-mono:ui-monospace,"Cascadia Mono","Segoe UI Mono",Consolas,monospace;
 }
@@ -45,7 +45,7 @@ st.markdown(
   letter-spacing:-0.01em;color:var(--ink);}
 .chip{display:inline-block;font-size:12px;padding:3px 10px;border-radius:100px;
   background:var(--accent-wash);color:var(--accent);
-  border:1px solid rgba(150,38,61,.22);white-space:nowrap;}
+  border:1px solid rgba(217,99,122,.30);white-space:nowrap;}
 .target-meta{font-size:13px;color:var(--ink-3);font-variant-numeric:tabular-nums;}
 .section-label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--ink-3);font-weight:600;margin:2px 0 6px;}
@@ -383,7 +383,7 @@ if st.session_state["usporedba_s"] and len(rezultati):
 
 st.divider()
 st.caption(
-    "Podaci: top-5 europskih liga, polusezona 2025/26 (podaci/top5_stats_combined.csv). "
+    "Podaci: https://theanalyst.com/, sezona 2025/26 (podaci/top5_stats_combined.csv). "
     "Uloge su izvedene K-Means klasteriranjem statistika — skup podataka nema stupac s "
     "pozicijom, pa 'uloga' opisuje stil igre, ne službenu poziciju."
 )
