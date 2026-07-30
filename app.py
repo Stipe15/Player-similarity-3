@@ -220,12 +220,15 @@ with st.sidebar:
             st.caption("Prilagođeno — više ne prati odabranu metodu iznad.")
 
     st.markdown("**Filtri**")
-    ista_uloga = st.checkbox("Samo ista uloga", value=False)
-    izbaci_ligu = st.checkbox("Izbaci istu ligu", value=False)
+    ista_uloga = st.checkbox("Samo ista uloga", value=False, key="ista_uloga_checkbox")
+    izbaci_ligu = st.checkbox("Izbaci istu ligu", value=False, key="izbaci_ligu_checkbox")
     min_minuta = st.slider(
-        "Najmanje minuta", min_value=450, max_value=3420, value=450, step=90
+        "Najmanje minuta", min_value=450, max_value=3420, value=450, step=90,
+        key="min_minuta_slider",
     )
-    n_rezultata = st.slider("Broj rezultata", min_value=5, max_value=25, value=10)
+    n_rezultata = st.slider(
+        "Broj rezultata", min_value=5, max_value=25, value=10, key="n_rezultata_slider"
+    )
 
 # ---------------------------------------------------------------------------
 # Izračun
