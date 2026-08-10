@@ -106,4 +106,4 @@ The app is ready to deploy on [Streamlit Community Cloud](https://share.streamli
 
 - Goalkeepers aren't covered — the stat set is entirely outfield.
 - "Roles" are statistical clusters, not official positions; treat them as a style label, not a lineup slot.
-- Covers the 2025/26 half-season, not a full season.
+- Covers only the 2025/26 season.
