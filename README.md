@@ -1,5 +1,7 @@
 # ⚽ PlayerMatch
 
+![PlayerMatch demo](docs/showcase.gif)
+
 Find who in Europe's top 5 leagues plays like a given player — by **style**, not just position.
 
 Type a name, get a ranked list of statistical look-alikes, and dig into per-player analysis charts: a full stat breakdown, a 2D map of the entire similarity space, and a "how replaceable is this player" score.
